@@ -77,21 +77,66 @@ function fallback(error: QuoteResult["error"]): QuoteResult {
   return { ok: false, quote: null, fetchedAt: null, stale: true, error };
 }
 
-export async function fetchGoldQuote(): Promise<QuoteResult> {
-  const key = process.env.GOLDAPI_KEY;
-  if (!key) return fallback("missing_key");
+// 主用 GOLDAPI_KEY，撞上额度后自动换 GOLDAPI_KEY_BACKUP。
+const KEY_ENVS = ["GOLDAPI_KEY", "GOLDAPI_KEY_BACKUP"] as const;
+// 401/403/429 基本就是该 key 的月度额度用尽或被禁，短时间再试只是白烧请求。
+const QUOTA_COOLDOWN_MS = 6 * 60 * 60_000;
 
+let keyPool: { key: string; pausedUntil: number }[] | null = null;
+
+function keys() {
+  if (!keyPool) {
+    const seen = new Set<string>();
+    keyPool = [];
+    for (const name of KEY_ENVS) {
+      const key = process.env[name]?.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      keyPool.push({ key, pausedUntil: 0 });
+    }
+  }
+  return keyPool;
+}
+
+type Attempt = { res: Response } | { failure: "missing_key" | "upstream" };
+
+/** 依次拿可用的 key 打上游；某个 key 撞上额度/鉴权错误就冷却它并换下一个。网络异常直接抛出。 */
+async function goldFetch(url: string, revalidate: number | false): Promise<Attempt> {
+  const pool = keys();
+  if (pool.length === 0) return { failure: "missing_key" };
+
+  let tried = 0;
+  for (const slot of pool) {
+    if (Date.now() < slot.pausedUntil) continue;
+    tried += 1;
+
+    const res = await fetch(url, {
+      headers: { "x-access-token": slot.key, "Content-Type": "application/json" },
+      next: { revalidate },
+    });
+    if (res.ok) return { res };
+    if (res.status === 401 || res.status === 403 || res.status === 429) {
+      slot.pausedUntil = Date.now() + QUOTA_COOLDOWN_MS;
+      console.warn(`[gold] key 已不可用（HTTP ${res.status}），冷却 6 小时后再试`);
+      continue;
+    }
+    return { res };
+  }
+
+  if (tried === 0) console.warn("[gold] 所有 key 都在冷却中，本次不打上游");
+  return { failure: "upstream" };
+}
+
+export async function fetchGoldQuote(): Promise<QuoteResult> {
   const ttl = Number.parseInt(process.env.GOLD_TTL_SECONDS ?? "600", 10);
 
   let raw: RawQuote;
   try {
-    const res = await fetch(ENDPOINT, {
-      headers: { "x-access-token": key, "Content-Type": "application/json" },
-      // Next 数据缓存：这里决定了真正打到 goldapi 的频率，与页面轮询频率解耦。
-      next: { revalidate: Number.isFinite(ttl) && ttl > 0 ? ttl : 600 },
-    });
-    if (!res.ok) return fallback("upstream");
-    raw = (await res.json()) as RawQuote;
+    // Next 数据缓存：这里决定了真正打到 goldapi 的频率，与页面轮询频率解耦。
+    const attempt = await goldFetch(ENDPOINT, Number.isFinite(ttl) && ttl > 0 ? ttl : 600);
+    if ("failure" in attempt) return fallback(attempt.failure);
+    if (!attempt.res.ok) return fallback("upstream");
+    raw = (await attempt.res.json()) as RawQuote;
   } catch {
     return fallback("network");
   }
@@ -108,8 +153,6 @@ const historyCache = new Map<string, DailyRange>();
 // 上游报错后的冷却，避免每次渲染都去撞墙。
 let historyPausedUntil = 0;
 const COOLDOWN_MS = 15 * 60_000;
-// 403/429 基本就是月度额度用尽，短时间再试只是白烧请求。
-const QUOTA_COOLDOWN_MS = 6 * 60 * 60_000;
 // 一次渲染最多现取几天，剩下的等后续请求慢慢补，免得冷启动一下子把配额打光。
 const MAX_NEW_DAYS = 2;
 
@@ -149,9 +192,10 @@ function normalizeDay(iso: string, raw: RawQuote): DailyRange | null {
  * 逐天串行取数，并在上游出错或当次新取达到上限时提前收手。
  */
 export async function fetchDailyRanges(): Promise<DailyHistory> {
-  const key = process.env.GOLDAPI_KEY;
   const limit = Number.parseInt(process.env.GOLD_HISTORY_DAYS ?? "7", 10);
-  if (!key || !Number.isFinite(limit) || limit <= 0) return { days: [], reason: "off" };
+  if (keys().length === 0 || !Number.isFinite(limit) || limit <= 0) {
+    return { days: [], reason: "off" };
+  }
 
   const days: DailyRange[] = [];
   let fetched = 0;
@@ -169,10 +213,13 @@ export async function fetchDailyRanges(): Promise<DailyHistory> {
 
     try {
       fetched += 1;
-      const res = await fetch(`${HISTORY_ENDPOINT}/${iso.replaceAll("-", "")}`, {
-        headers: { "x-access-token": key, "Content-Type": "application/json" },
-        next: { revalidate: false },
-      });
+      const attempt = await goldFetch(`${HISTORY_ENDPOINT}/${iso.replaceAll("-", "")}`, false);
+      if ("failure" in attempt) {
+        console.warn(`[gold] 历史行情 ${iso} 没有可用的 key`);
+        historyPausedUntil = Date.now() + COOLDOWN_MS;
+        break;
+      }
+      const res = attempt.res;
       if (!res.ok) {
         console.warn(`[gold] 历史行情 ${iso} 取数失败：HTTP ${res.status}`);
         historyPausedUntil =

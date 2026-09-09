@@ -15,6 +15,7 @@ npm run dev
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `GOLDAPI_KEY` | 是 | goldapi.io 的 `x-access-token`。只在服务端读取，不会进入浏览器产物。 |
+| `GOLDAPI_KEY_BACKUP` | 否 | 备用令牌。主令牌返回 401/403/429 时自动改用它。 |
 | `GOLD_TTL_SECONDS` | 否 | 向 goldapi 取数的最小间隔，默认 `600`。 |
 | `GOLD_HISTORY_DAYS` | 否 | 「每日区间」回看的交易日数量，默认 `7`，设为 `0` 关闭。 |
 
@@ -50,7 +51,8 @@ goldapi.io 免费额度很小，所以取数分成两层：
 注意免费额度只有 **100 次/月**：按 `GOLD_TTL_SECONDS=600` 算，只要页面被持续访问，
 一天就要打 144 次上游，一天就能把整月额度烧光。想长期挂着就把 TTL 调到几小时级别，
 或者升级 goldapi 套餐。用 `https://www.goldapi.io/api/stat` 可以随时查本月用量。
-
+配了 `GOLDAPI_KEY_BACKUP` 的话，主令牌返回 401/403/429 时会当场换到备用令牌重试，
+失效的令牌冷却 6 小时。两个令牌的额度是叠加关系，不是无限量，该调大 TTL 还是得调。
 想更省配额就把 `GOLD_TTL_SECONDS` 调大；想更实时就调小，但注意月度额度。
 
 ## 安全
