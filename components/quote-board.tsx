@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DailyRange, QuoteResult } from "@/lib/types";
+import type { DailyHistory, QuoteResult } from "@/lib/types";
 import { Converter } from "@/components/converter";
 import { DailyRanges } from "@/components/daily-ranges";
 import type { Tick } from "@/components/intraday-chart";
@@ -14,12 +14,12 @@ const POLL_MS = 60_000;
 // 日内折线只保留最近这么多个采样点。
 const MAX_TICKS = 240;
 
-export function QuoteBoard({ initial, history }: { initial: QuoteResult; history: DailyRange[] }) {
+export function QuoteBoard({ initial, history }: { initial: QuoteResult; history: DailyHistory }) {
   const [result, setResult] = useState<QuoteResult>(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const [ticks, setTicks] = useState<Tick[]>(() =>
-    initial.quote ? [{ t: initial.fetchedAt ?? initial.quote.timestamp, gram: initial.quote.gram }] : [],
+    initial.quote ? [{ t: initial.quote.timestamp, gram: initial.quote.gram }] : [],
   );
   const previousGram = useRef<number | null>(initial.quote?.gram ?? null);
 
@@ -34,10 +34,12 @@ export function QuoteBoard({ initial, history }: { initial: QuoteResult; history
           setFlash(next.quote.gram > before ? "up" : "down");
         }
         previousGram.current = next.quote.gram;
-        const gram = next.quote.gram;
-        const at = next.fetchedAt ?? Date.now();
+        const tick: Tick = { t: next.quote.timestamp, gram: next.quote.gram };
         if (!next.stale) {
-          setTicks((current) => [...current, { t: at, gram }].slice(-MAX_TICKS));
+          // 服务端有缓存，反复刷新拿到的往往是同一份数据，不能往折线上叠点。
+          setTicks((current) =>
+            current[current.length - 1]?.t === tick.t ? current : [...current, tick].slice(-MAX_TICKS),
+          );
         }
       }
       setResult(next);
@@ -86,8 +88,7 @@ export function QuoteBoard({ initial, history }: { initial: QuoteResult; history
         ticks={ticks}
         onRefresh={load}
       />
-      <DailyRanges days={history} quote={result.quote} />
-      <UnitStrip quote={result.quote} />
+      <DailyRanges history={history} quote={result.quote} />      <UnitStrip quote={result.quote} />
       <KaratGrid quote={result.quote} />
       <Converter quote={result.quote} />
     </>

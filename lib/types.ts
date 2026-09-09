@@ -35,6 +35,12 @@ export type DailyRange = {
   closeGram: number;
 };
 
+export type DailyHistory = {
+  days: DailyRange[];
+  /** days 为空时的原因：off = 没开这个模块，unavailable = 上游暂时取不到。 */
+  reason?: "off" | "unavailable";
+};
+
 export type QuoteResult = {
   ok: boolean;
   quote: GoldQuote | null;

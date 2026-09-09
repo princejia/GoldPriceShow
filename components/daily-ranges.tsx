@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { DailyRange, GoldQuote } from "@/lib/types";
+import type { DailyHistory, DailyRange, GoldQuote } from "@/lib/types";
 import { linePath, type Point } from "@/lib/chart";
 import { clamp, dayCN, money } from "@/lib/format";
 
@@ -12,10 +12,12 @@ const X_PAD = 6;
 
 type Row = DailyRange & { label: string; today: boolean };
 
-export function DailyRanges({ days, quote }: { days: DailyRange[]; quote: GoldQuote }) {
+export function DailyRanges({ history, quote }: { history: DailyHistory; quote: GoldQuote }) {
   const [hover, setHover] = useState<number | null>(null);
 
-  if (days.length === 0) return null;
+  const days = history.days;
+  if (history.reason === "off") return null;
+  if (days.length === 0) return <Unavailable />;
 
   const rows: Row[] = [
     ...days.map((day) => ({ ...day, label: dayCN(day.date), today: false })),
@@ -139,6 +141,20 @@ export function DailyRanges({ days, quote }: { days: DailyRange[]; quote: GoldQu
           <span>期间最低 {money(floor)}</span>
           <span>期间最高 {money(ceiling)}</span>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function Unavailable() {
+  return (
+    <section className="border-b border-line py-14 md:py-20">
+      <div className="mx-auto w-full max-w-[1400px] px-5 md:px-8">
+        <h2 className="text-xl font-medium tracking-tight md:text-2xl">每日走势</h2>
+        <p className="mt-3 max-w-[52ch] text-sm leading-relaxed text-muted">
+          历史行情暂时取不到，折线暂不显示。常见原因是 goldapi 的月度额度用尽（历史接口会直接返回 403），
+          额度恢复后这里会自动出现。
+        </p>
       </div>
     </section>
   );

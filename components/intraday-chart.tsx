@@ -67,10 +67,9 @@ export function IntradayChart({ quote, ticks }: { quote: GoldQuote; ticks: Tick[
       </svg>
 
       <div className="mt-2 flex items-baseline justify-between text-xs text-muted">
-        <span>开盘 {money(quote.openGram)}</span>
+        <span className="num">开盘 {money(quote.openGram)}</span>
         <span className="num">
-          {ticks.length > 1 ? `${ticks.length} 次采样 · ` : ""}
-          {clockCN(ticks[ticks.length - 1]?.t ?? quote.timestamp)}
+          {ticks.length > 1 ? `开盘后 ${ticks.length} 个采样点` : `数据时间 ${clockCN(quote.timestamp)}`}
         </span>
       </div>
     </div>

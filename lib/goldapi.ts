@@ -1,5 +1,5 @@
 import "server-only";
-import type { DailyRange, GoldQuote, Karat, QuoteResult } from "@/lib/types";
+import type { DailyHistory, DailyRange, GoldQuote, Karat, QuoteResult } from "@/lib/types";
 
 const ENDPOINT = "https://www.goldapi.io/api/price/XAU/CNY";
 const HISTORY_ENDPOINT = "https://www.goldapi.io/api/XAU/CNY";
@@ -105,8 +105,13 @@ export async function fetchGoldQuote(): Promise<QuoteResult> {
 
 // 历史行情不会再变，成功过的日期直接常驻内存，不再打上游。
 const historyCache = new Map<string, DailyRange>();
-// 上游报错（多半是配额用尽）后的冷却，避免每次渲染都去撞墙。
+// 上游报错后的冷却，避免每次渲染都去撞墙。
 let historyPausedUntil = 0;
+const COOLDOWN_MS = 15 * 60_000;
+// 403/429 基本就是月度额度用尽，短时间再试只是白烧请求。
+const QUOTA_COOLDOWN_MS = 6 * 60 * 60_000;
+// 一次渲染最多现取几天，剩下的等后续请求慢慢补，免得冷启动一下子把配额打光。
+const MAX_NEW_DAYS = 2;
 
 const isoDay = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Shanghai",
@@ -141,14 +146,15 @@ function normalizeDay(iso: string, raw: RawQuote): DailyRange | null {
 
 /**
  * 最近若干个交易日的克价区间，按时间从早到晚。
- * 逐天串行取数并在遇到上游错误时提前收手，尽量少烧配额。
+ * 逐天串行取数，并在上游出错或当次新取达到上限时提前收手。
  */
-export async function fetchDailyRanges(): Promise<DailyRange[]> {
+export async function fetchDailyRanges(): Promise<DailyHistory> {
   const key = process.env.GOLDAPI_KEY;
   const limit = Number.parseInt(process.env.GOLD_HISTORY_DAYS ?? "7", 10);
-  if (!key || !Number.isFinite(limit) || limit <= 0) return [];
+  if (!key || !Number.isFinite(limit) || limit <= 0) return { days: [], reason: "off" };
 
   const days: DailyRange[] = [];
+  let fetched = 0;
 
   for (let back = 1; back <= limit * 2 + 4 && days.length < limit; back += 1) {
     const iso = shanghaiDay(back);
@@ -159,26 +165,30 @@ export async function fetchDailyRanges(): Promise<DailyRange[]> {
       days.push(cached);
       continue;
     }
-    if (Date.now() < historyPausedUntil) break;
+    if (fetched >= MAX_NEW_DAYS || Date.now() < historyPausedUntil) break;
 
     try {
+      fetched += 1;
       const res = await fetch(`${HISTORY_ENDPOINT}/${iso.replaceAll("-", "")}`, {
         headers: { "x-access-token": key, "Content-Type": "application/json" },
         next: { revalidate: false },
       });
       if (!res.ok) {
-        historyPausedUntil = Date.now() + 15 * 60_000;
+        console.warn(`[gold] 历史行情 ${iso} 取数失败：HTTP ${res.status}`);
+        historyPausedUntil =
+          Date.now() + (res.status === 403 || res.status === 429 ? QUOTA_COOLDOWN_MS : COOLDOWN_MS);
         break;
       }
       const day = normalizeDay(iso, (await res.json()) as RawQuote);
       if (!day) continue;
       historyCache.set(iso, day);
       days.push(day);
-    } catch {
-      historyPausedUntil = Date.now() + 15 * 60_000;
+    } catch (error) {
+      console.warn(`[gold] 历史行情 ${iso} 取数异常：`, error);
+      historyPausedUntil = Date.now() + COOLDOWN_MS;
       break;
     }
   }
 
-  return days.reverse();
+  return days.length > 0 ? { days: days.reverse() } : { days, reason: "unavailable" };
 }
