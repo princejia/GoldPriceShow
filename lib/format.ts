@@ -27,5 +27,13 @@ export const dateCN = (ms: number) =>
     timeZone: "Asia/Shanghai",
   }).format(new Date(ms));
 
+/** 把 YYYY-MM-DD 渲染成 “9/8”。 */
+export const dayCN = (iso: string) =>
+  new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(`${iso}T00:00:00+08:00`));
+
 export const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));

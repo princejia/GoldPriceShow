@@ -1,7 +1,8 @@
 import "server-only";
-import type { GoldQuote, Karat, QuoteResult } from "@/lib/types";
+import type { DailyRange, GoldQuote, Karat, QuoteResult } from "@/lib/types";
 
 const ENDPOINT = "https://www.goldapi.io/api/price/XAU/CNY";
+const HISTORY_ENDPOINT = "https://www.goldapi.io/api/XAU/CNY";
 const TROY_OUNCE_IN_GRAM = 31.1034768;
 
 /** 展示用的成色。goldapi 返回 12 档，页面只保留国内外常见的 5 档。 */
@@ -100,4 +101,84 @@ export async function fetchGoldQuote(): Promise<QuoteResult> {
 
   lastGood = { quote, fetchedAt: Date.now() };
   return { ok: true, quote, fetchedAt: lastGood.fetchedAt, stale: false };
+}
+
+// 历史行情不会再变，成功过的日期直接常驻内存，不再打上游。
+const historyCache = new Map<string, DailyRange>();
+// 上游报错（多半是配额用尽）后的冷却，避免每次渲染都去撞墙。
+let historyPausedUntil = 0;
+
+const isoDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** 从今天往前数第 n 天在上海时区的 YYYY-MM-DD。 */
+const shanghaiDay = (back: number) => isoDay.format(new Date(Date.now() - back * 86_400_000));
+
+const isWeekend = (iso: string) => {
+  const day = new Date(`${iso}T00:00:00Z`).getUTCDay();
+  return day === 0 || day === 6;
+};
+
+function normalizeDay(iso: string, raw: RawQuote): DailyRange | null {
+  const close = raw.price;
+  if (typeof close !== "number" || !Number.isFinite(close) || close <= 0) return null;
+
+  const open = raw.open_price ?? close;
+  const low = raw.low_price ?? Math.min(open, close);
+  const high = raw.high_price ?? Math.max(open, close);
+
+  return {
+    date: iso,
+    lowGram: toGram(Math.min(low, high)),
+    highGram: toGram(Math.max(low, high)),
+    closeGram: toGram(close),
+  };
+}
+
+/**
+ * 最近若干个交易日的克价区间，按时间从早到晚。
+ * 逐天串行取数并在遇到上游错误时提前收手，尽量少烧配额。
+ */
+export async function fetchDailyRanges(): Promise<DailyRange[]> {
+  const key = process.env.GOLDAPI_KEY;
+  const limit = Number.parseInt(process.env.GOLD_HISTORY_DAYS ?? "7", 10);
+  if (!key || !Number.isFinite(limit) || limit <= 0) return [];
+
+  const days: DailyRange[] = [];
+
+  for (let back = 1; back <= limit * 2 + 4 && days.length < limit; back += 1) {
+    const iso = shanghaiDay(back);
+    if (isWeekend(iso)) continue;
+
+    const cached = historyCache.get(iso);
+    if (cached) {
+      days.push(cached);
+      continue;
+    }
+    if (Date.now() < historyPausedUntil) break;
+
+    try {
+      const res = await fetch(`${HISTORY_ENDPOINT}/${iso.replaceAll("-", "")}`, {
+        headers: { "x-access-token": key, "Content-Type": "application/json" },
+        next: { revalidate: false },
+      });
+      if (!res.ok) {
+        historyPausedUntil = Date.now() + 15 * 60_000;
+        break;
+      }
+      const day = normalizeDay(iso, (await res.json()) as RawQuote);
+      if (!day) continue;
+      historyCache.set(iso, day);
+      days.push(day);
+    } catch {
+      historyPausedUntil = Date.now() + 15 * 60_000;
+      break;
+    }
+  }
+
+  return days.reverse();
 }

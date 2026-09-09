@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { QuoteResult } from "@/lib/types";
+import type { DailyRange, QuoteResult } from "@/lib/types";
 import { Converter } from "@/components/converter";
+import { DailyRanges } from "@/components/daily-ranges";
 import { KaratGrid } from "@/components/karat-grid";
 import { QuoteError } from "@/components/quote-error";
 import { QuoteHero } from "@/components/quote-hero";
@@ -10,7 +11,7 @@ import { UnitStrip } from "@/components/unit-strip";
 
 const POLL_MS = 60_000;
 
-export function QuoteBoard({ initial }: { initial: QuoteResult }) {
+export function QuoteBoard({ initial, history }: { initial: QuoteResult; history: DailyRange[] }) {
   const [result, setResult] = useState<QuoteResult>(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
@@ -73,6 +74,7 @@ export function QuoteBoard({ initial }: { initial: QuoteResult }) {
         flash={flash}
         onRefresh={load}
       />
+      <DailyRanges days={history} quote={result.quote} />
       <UnitStrip quote={result.quote} />
       <KaratGrid quote={result.quote} />
       <Converter quote={result.quote} />

@@ -27,6 +27,14 @@ export type GoldQuote = {
   karats: Karat[];
 };
 
+/** 某一交易日的克价区间，日期为上海时区的 YYYY-MM-DD。 */
+export type DailyRange = {
+  date: string;
+  lowGram: number;
+  highGram: number;
+  closeGram: number;
+};
+
 export type QuoteResult = {
   ok: boolean;
   quote: GoldQuote | null;
