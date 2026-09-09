@@ -4,17 +4,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DailyRange, QuoteResult } from "@/lib/types";
 import { Converter } from "@/components/converter";
 import { DailyRanges } from "@/components/daily-ranges";
+import type { Tick } from "@/components/intraday-chart";
 import { KaratGrid } from "@/components/karat-grid";
 import { QuoteError } from "@/components/quote-error";
 import { QuoteHero } from "@/components/quote-hero";
 import { UnitStrip } from "@/components/unit-strip";
 
 const POLL_MS = 60_000;
+// 日内折线只保留最近这么多个采样点。
+const MAX_TICKS = 240;
 
 export function QuoteBoard({ initial, history }: { initial: QuoteResult; history: DailyRange[] }) {
   const [result, setResult] = useState<QuoteResult>(initial);
   const [refreshing, setRefreshing] = useState(false);
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
+  const [ticks, setTicks] = useState<Tick[]>(() =>
+    initial.quote ? [{ t: initial.fetchedAt ?? initial.quote.timestamp, gram: initial.quote.gram }] : [],
+  );
   const previousGram = useRef<number | null>(initial.quote?.gram ?? null);
 
   const load = useCallback(async () => {
@@ -28,6 +34,11 @@ export function QuoteBoard({ initial, history }: { initial: QuoteResult; history
           setFlash(next.quote.gram > before ? "up" : "down");
         }
         previousGram.current = next.quote.gram;
+        const gram = next.quote.gram;
+        const at = next.fetchedAt ?? Date.now();
+        if (!next.stale) {
+          setTicks((current) => [...current, { t: at, gram }].slice(-MAX_TICKS));
+        }
       }
       setResult(next);
     } catch {
@@ -72,6 +83,7 @@ export function QuoteBoard({ initial, history }: { initial: QuoteResult; history
         stale={result.stale}
         refreshing={refreshing}
         flash={flash}
+        ticks={ticks}
         onRefresh={load}
       />
       <DailyRanges days={history} quote={result.quote} />

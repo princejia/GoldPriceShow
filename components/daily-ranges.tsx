@@ -1,15 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import type { DailyRange, GoldQuote } from "@/lib/types";
+import { linePath, type Point } from "@/lib/chart";
 import { clamp, dayCN, money } from "@/lib/format";
+
+const W = 600;
+const H = 200;
+const PAD = 12;
+const X_PAD = 6;
 
 type Row = DailyRange & { label: string; today: boolean };
 
 export function DailyRanges({ days, quote }: { days: DailyRange[]; quote: GoldQuote }) {
+  const [hover, setHover] = useState<number | null>(null);
+
   if (days.length === 0) return null;
 
   const rows: Row[] = [
-    ...days.map((d) => ({ ...d, label: dayCN(d.date), today: false })),
+    ...days.map((day) => ({ ...day, label: dayCN(day.date), today: false })),
     {
       date: "today",
       lowGram: Math.min(quote.lowGram, quote.gram),
@@ -22,63 +31,114 @@ export function DailyRanges({ days, quote }: { days: DailyRange[]; quote: GoldQu
 
   const floor = Math.min(...rows.map((r) => r.lowGram));
   const ceiling = Math.max(...rows.map((r) => r.highGram));
-  const span = ceiling - floor;
-  const pos = (value: number) => (span > 0 ? clamp(((value - floor) / span) * 100, 0, 100) : 50);
+  const span = ceiling - floor || 1;
+
+  const x = (i: number) =>
+    rows.length < 2 ? W / 2 : X_PAD + (i / (rows.length - 1)) * (W - X_PAD * 2);
+  const y = (value: number) => PAD + (1 - (value - floor) / span) * (H - PAD * 2);
+
+  const tops: Point[] = rows.map((r, i) => ({ x: x(i), y: y(r.highGram) }));
+  const bottoms: Point[] = rows.map((r, i) => ({ x: x(i), y: y(r.lowGram) }));
+  const closes: Point[] = rows.map((r, i) => ({ x: x(i), y: y(r.closeGram) }));
+
+  const active = hover ?? rows.length - 1;
+  const picked = rows[active];
+  const pickedSpan = picked.highGram - picked.lowGram;
+
+  const track = (clientX: number, element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    setHover(Math.round(ratio * (rows.length - 1)));
+  };
 
   return (
     <section className="border-b border-line py-14 md:py-20">
       <div className="mx-auto w-full max-w-[1400px] px-5 md:px-8">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-          <div>
-            <h2 className="text-xl font-medium tracking-tight md:text-2xl">每日区间</h2>
-            <p className="mt-3 max-w-[52ch] text-sm leading-relaxed text-muted">
-              最近 {days.length} 个交易日的克价高低区间，竖线是当日收盘价。周末休市不计入。
-            </p>
-          </div>
-          <div className="num text-sm text-muted">
-            区间 {money(floor)} – {money(ceiling)} 元/克
+        <h2 className="text-xl font-medium tracking-tight md:text-2xl">每日走势</h2>
+        <p className="mt-3 max-w-[52ch] text-sm leading-relaxed text-muted">
+          最近 {days.length} 个交易日的克价收盘折线，周末休市不计入。上游历史接口只给收盘价，
+          有高低区间的日子（如今日）额外画一根竖线。
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-baseline gap-x-8 gap-y-2 md:mt-10">
+          <span className={`text-sm ${picked.today ? "text-fg" : "text-muted"}`}>{picked.label}</span>
+          {pickedSpan > 0 ? (
+            <span className="num text-sm">
+              <span className="text-muted">区间 </span>
+              {money(picked.lowGram)} – {money(picked.highGram)}
+            </span>
+          ) : null}
+          <span className="num text-sm">
+            <span className="text-muted">{picked.today ? "现价 " : "收盘 "}</span>
+            {money(picked.closeGram)}
+          </span>
+        </div>
+
+        <div
+          className="mt-5 touch-pan-y"
+          onPointerMove={(event) => track(event.clientX, event.currentTarget)}
+          onPointerLeave={() => setHover(null)}
+        >
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full overflow-visible" role="presentation">
+            {hover !== null ? (
+              <line
+                x1={x(active)}
+                y1="0"
+                x2={x(active)}
+                y2={H}
+                className="stroke-line-strong"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}            {rows.map((row, i) =>
+              row.highGram > row.lowGram ? (
+                <line
+                  key={`w-${row.date}`}
+                  x1={tops[i].x}
+                  y1={tops[i].y}
+                  x2={bottoms[i].x}
+                  y2={bottoms[i].y}
+                  className={row.today ? "stroke-accent" : "stroke-line-strong"}
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                  opacity="0.35"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : null,
+            )}
+            <path
+              d={linePath(closes)}
+              fill="none"
+              className="stroke-fg"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            {closes.map((point, i) => (
+              <circle
+                key={rows[i].date}
+                cx={point.x}
+                cy={point.y}
+                r={i === active ? 5 : 3}
+                className={rows[i].today ? "fill-accent" : "fill-fg"}
+              />
+            ))}
+          </svg>
+
+          <div className="mt-3 flex justify-between text-xs">
+            {rows.map((row, i) => (
+              <span key={row.date} className={`num ${i === active ? "text-fg" : "text-muted"}`}>
+                {row.label}
+              </span>
+            ))}
           </div>
         </div>
 
-        <ul className="mt-10 md:mt-12">
-          {rows.map((row) => (
-            <li
-              key={row.date}
-              className="grid grid-cols-[3.25rem_1fr] items-center gap-x-4 gap-y-3 border-t border-line py-4 md:grid-cols-[4.5rem_1fr_12rem]"
-            >
-              <span
-                className={`num col-start-1 row-start-1 text-sm ${row.today ? "text-fg" : "text-muted"}`}
-              >
-                {row.label}
-              </span>
-
-              <div className="relative col-span-2 col-start-1 row-start-2 h-3 md:col-span-1 md:col-start-2 md:row-start-1">
-                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-line" />
-                <div
-                  className={`absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full ${
-                    row.today ? "bg-accent" : "bg-line-strong"
-                  }`}
-                  style={{
-                    left: `${pos(row.lowGram)}%`,
-                    width: `${Math.max(pos(row.highGram) - pos(row.lowGram), 0.6)}%`,
-                  }}
-                />
-                <span
-                  className="absolute top-1/2 h-3 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-fg"
-                  style={{ left: `${pos(row.closeGram)}%` }}
-                />
-              </div>
-
-              <div className="num col-start-2 row-start-1 flex items-baseline justify-end gap-2 text-sm md:col-start-3">
-                <span className={row.today ? "" : "text-muted"}>
-                  {money(row.lowGram)} – {money(row.highGram)}
-                </span>
-                <span className="text-muted">·</span>
-                <span>{money(row.closeGram)}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="num mt-6 flex items-baseline justify-between border-t border-line pt-4 text-sm text-muted">
+          <span>期间最低 {money(floor)}</span>
+          <span>期间最高 {money(ceiling)}</span>
+        </div>
       </div>
     </section>
   );

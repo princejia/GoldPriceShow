@@ -3,7 +3,8 @@
 import type { CSSProperties } from "react";
 import { ArrowsClockwise, TrendDown, TrendUp, WarningCircle } from "@phosphor-icons/react";
 import type { GoldQuote } from "@/lib/types";
-import { clamp, clockCN, money, signedMoney, signedPercent } from "@/lib/format";
+import { IntradayChart, type Tick } from "@/components/intraday-chart";
+import { clockCN, money, signedMoney, signedPercent } from "@/lib/format";
 
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties;
 
@@ -13,14 +14,14 @@ type Props = {
   stale: boolean;
   refreshing: boolean;
   flash: "up" | "down" | null;
+  ticks: Tick[];
   onRefresh: () => void;
 };
 
-export function QuoteHero({ quote, fetchedAt, stale, refreshing, flash, onRefresh }: Props) {
+export function QuoteHero({ quote, fetchedAt, stale, refreshing, flash, ticks, onRefresh }: Props) {
   const up = quote.changePercent >= 0;
   const tone = up ? "text-up" : "text-down";
   const span = quote.highGram - quote.lowGram;
-  const position = span > 0 ? clamp(((quote.gram - quote.lowGram) / span) * 100, 0, 100) : 50;
   const spanPercent = quote.lowGram > 0 ? (span / quote.lowGram) * 100 : 0;
 
   return (
@@ -95,19 +96,19 @@ export function QuoteHero({ quote, fetchedAt, stale, refreshing, flash, onRefres
                 <span className="num text-sm">振幅 {spanPercent.toFixed(2)}%</span>
               </div>
 
-              <div className="relative mt-5 h-3">
-                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-line-strong" />
-                <div className="absolute left-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-line-strong" />
-                <div className="absolute right-0 top-1/2 h-2.5 w-px -translate-y-1/2 bg-line-strong" />
-                <span
-                  className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-fg"
-                  style={{ left: `${position}%` }}
-                />
+              <div className="mt-4">
+                <IntradayChart quote={quote} ticks={ticks} />
               </div>
 
-              <div className="mt-2.5 flex items-baseline justify-between">
-                <span className="num text-sm">{money(quote.lowGram)}</span>
-                <span className="num text-sm">{money(quote.highGram)}</span>
+              <div className="mt-2.5 flex items-baseline justify-between border-t border-line pt-3">
+                <span className="num text-sm">
+                  <span className="text-muted">低 </span>
+                  {money(quote.lowGram)}
+                </span>
+                <span className="num text-sm">
+                  <span className="text-muted">高 </span>
+                  {money(quote.highGram)}
+                </span>
               </div>
 
               <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-5">
