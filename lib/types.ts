@@ -39,7 +39,11 @@ export type DailyHistory = {
   days: DailyRange[];
   /** days 为空时的原因：off = 没开这个模块，unavailable = 上游暂时取不到。 */
   reason?: "off" | "unavailable";
+  source?: QuoteSourceId;
 };
+
+/** 可用的行情源。排在前面的优先，见 lib/quote.ts 的 SOURCES。 */
+export type QuoteSourceId = "goldapi" | "yahoo" | "swissquote" | "goldapicom";
 
 export type QuoteResult = {
   ok: boolean;
@@ -48,5 +52,7 @@ export type QuoteResult = {
   fetchedAt: number | null;
   /** true 表示这是上一次成功的数据，本次向上游取数失败了。 */
   stale: boolean;
-  error?: "missing_key" | "upstream" | "network" | "payload";
+  /** 这份数据最终来自哪个源。 */
+  source?: QuoteSourceId;
+  error?: "no_source" | "upstream" | "network" | "payload";
 };

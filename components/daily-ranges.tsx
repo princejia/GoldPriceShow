@@ -58,8 +58,8 @@ export function DailyRanges({ history, quote }: { history: DailyHistory; quote: 
       <div className="mx-auto w-full max-w-[1400px] px-5 md:px-8">
         <h2 className="text-xl font-medium tracking-tight md:text-2xl">每日走势</h2>
         <p className="mt-3 max-w-[52ch] text-sm leading-relaxed text-muted">
-          最近 {days.length} 个交易日的克价收盘折线，周末休市不计入。上游历史接口只给收盘价，
-          有高低区间的日子（如今日）额外画一根竖线。
+          最近 {days.length} 个交易日的克价收盘折线，周末休市不计入。
+          有高低区间的日子额外画一根竖线；遇上只给收盘价的行情源，那一天就只有点。
         </p>
 
         <div className="mt-8 flex flex-wrap items-baseline gap-x-8 gap-y-2 md:mt-10">
@@ -152,8 +152,7 @@ function Unavailable() {
       <div className="mx-auto w-full max-w-[1400px] px-5 md:px-8">
         <h2 className="text-xl font-medium tracking-tight md:text-2xl">每日走势</h2>
         <p className="mt-3 max-w-[52ch] text-sm leading-relaxed text-muted">
-          历史行情暂时取不到，折线暂不显示。常见原因是 goldapi 的月度额度用尽（历史接口会直接返回 403），
-          额度恢复后这里会自动出现。
+          历史行情暂时取不到，折线暂不显示。提供日线的行情源都没响应，恢复后这里会自动出现。
         </p>
       </div>
     </section>

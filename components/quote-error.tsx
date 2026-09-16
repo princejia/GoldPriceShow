@@ -4,9 +4,9 @@ import { ArrowsClockwise, PlugsConnected } from "@phosphor-icons/react";
 import type { QuoteResult } from "@/lib/types";
 
 const MESSAGES: Record<NonNullable<QuoteResult["error"]> | "unknown", string> = {
-  missing_key: "服务端还没有配置 GOLDAPI_KEY，行情接口无法调用。",
-  upstream: "goldapi.io 拒绝了这次请求，通常是免费额度用完了。",
-  network: "暂时连不上行情源，可能是网络波动。",
+  no_source: "服务端把行情源全禁用了，检查一下 GOLD_SOURCES 配置。",
+  upstream: "几个行情源都拒绝了这次请求，稍后再试。",
+  network: "暂时连不上任何一个行情源，可能是网络波动。",
   payload: "行情源返回了无法解析的数据。",
   unknown: "行情暂时取不到。",
 };

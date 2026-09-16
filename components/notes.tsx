@@ -16,7 +16,7 @@ export function Notes() {
             <article>
               <h3 className="text-lg font-medium tracking-tight">刷新节奏</h3>
               <p className="mt-4 max-w-[52ch] text-base leading-relaxed text-muted">
-                {"数据来自 goldapi.io。服务端每十分钟才向上游取一次，页面每分钟从缓存读一次，所以连点刷新未必会看到新数字。"}
+                {"服务端每十分钟才向上游取一次，页面每分钟从缓存读一次，所以连点刷新未必会看到新数字。行情源有好几个，当前用的是哪一个标在页顶「更新于」旁边。"}
               </p>
             </article>
 

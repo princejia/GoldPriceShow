@@ -86,6 +86,7 @@ export function QuoteBoard({ initial, history }: { initial: QuoteResult; history
         refreshing={refreshing}
         flash={flash}
         ticks={ticks}
+        source={result.source}
         onRefresh={load}
       />
       <DailyRanges history={history} quote={result.quote} />      <UnitStrip quote={result.quote} />

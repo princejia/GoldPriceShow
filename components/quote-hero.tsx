@@ -2,9 +2,10 @@
 
 import type { CSSProperties } from "react";
 import { ArrowsClockwise, TrendDown, TrendUp, WarningCircle } from "@phosphor-icons/react";
-import type { GoldQuote } from "@/lib/types";
+import type { GoldQuote, QuoteSourceId } from "@/lib/types";
 import { IntradayChart, type Tick } from "@/components/intraday-chart";
 import { clockCN, money, signedMoney, signedPercent } from "@/lib/format";
+import { SOURCE_META } from "@/lib/source-meta";
 
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties;
 
@@ -15,10 +16,20 @@ type Props = {
   refreshing: boolean;
   flash: "up" | "down" | null;
   ticks: Tick[];
+  source?: QuoteSourceId;
   onRefresh: () => void;
 };
 
-export function QuoteHero({ quote, fetchedAt, stale, refreshing, flash, ticks, onRefresh }: Props) {
+export function QuoteHero({
+  quote,
+  fetchedAt,
+  stale,
+  refreshing,
+  flash,
+  ticks,
+  source,
+  onRefresh,
+}: Props) {
   const up = quote.changePercent >= 0;
   const tone = up ? "text-up" : "text-down";
   const span = quote.highGram - quote.lowGram;
@@ -86,6 +97,10 @@ export function QuoteHero({ quote, fetchedAt, stale, refreshing, flash, ticks, o
                   更新于 {clockCN(fetchedAt ?? quote.timestamp)}
                 </span>
               )}
+
+              {source ? (
+                <span className="text-sm text-muted">源 · {SOURCE_META[source].label}</span>
+              ) : null}
             </div>
           </div>
 

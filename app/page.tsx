@@ -2,7 +2,7 @@ import { Notes } from "@/components/notes";
 import { QuoteBoard } from "@/components/quote-board";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
-import { fetchDailyRanges, fetchGoldQuote } from "@/lib/goldapi";
+import { fetchDailyRanges, fetchGoldQuote } from "@/lib/quote";
 
 // 首屏在服务端取数，浏览器拿到的第一帧就有价格，之后由客户端轮询接管。
 export const dynamic = "force-dynamic";

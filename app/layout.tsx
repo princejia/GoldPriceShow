@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     "国际现货黄金（XAU）折算人民币的克价、盎司价与各成色金价，含日内区间、买卖价与重量换算。",
   openGraph: {
     title: "金价 · 国际现货黄金人民币报价",
-    description: "克价、盎司价、各成色金价与重量换算，数据来自 goldapi.io。",
+    description: "克价、盎司价、各成色金价与重量换算，多行情源自动回退。",
     type: "website",
     locale: "zh_CN",
   },
